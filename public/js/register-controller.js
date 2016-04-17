@@ -54,10 +54,6 @@ angular.module("iwsProjectApp").controller("RegisterController", ["$scope", func
                     if (res.code != 0) {
                         $scope.$apply(function () {
                             $scope.status.validationErrors = res.text;
-                            //reset fields after register
-                            $scope.model.userName = "";
-                            $scope.model.password = "";
-                            $scope.model.userKey = "";
                         });
 
                     } else {
