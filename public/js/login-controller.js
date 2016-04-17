@@ -44,46 +44,58 @@ angular.module("iwsProjectApp", []).controller("LoginController", ["$scope", fun
         // check if valid
         if ( captcha.getCaptchaData().valid ) {
 
-            // get the post data
-            var postData = {
-                "userName":model.userName,
-                "password": model.password
-            };
-            //set captcha details
-             postData[captcha.getCaptchaData().name] = captcha.getCaptchaData().value;
-
-            // post
-            $.ajax({
-                url: "/login",
-                type: "POST",
-                dataType: "json",
-                contentType: "application/json; charset=utf-8",
-                data: JSON.stringify(postData),
-
-                // success
-                success: function (res) {
-
-                    // check if errors
-                    if (res.code != 0) {
-                        $scope.$apply(function () {
-                            $scope.status.validationErrors = res.text;
-                        });
-
-                    } else {
-
-                        //show alert
-
-                        //call backs
-
-
-
+            if($scope.frm.$valid){
+                // get the post data
+                var postData = {
+                    "userName":model.userName,
+                    "userPass": model.password,
+                    "userKey": model.userKey
+                };
+                //set captcha details
+                 postData[captcha.getCaptchaData().name] = captcha.getCaptchaData().value;
+    
+                // post
+                $.ajax({
+                    url: "/login",
+                    type: "POST",
+                    dataType: "json",
+                    contentType: "application/json; charset=utf-8",
+                    data: JSON.stringify(postData),
+    
+                    // success
+                    success: function (res) {
+    
+                        // check if errors
+                        if (res.code != 0) {
+                            $scope.$apply(function () {
+                                $scope.status.validationErrors = res.text;
+                            });
+    
+                        } else {
+    
+                            //show alert
+                            $scope.$apply(function () {
+                                //reset fields after register
+                                $scope.model.userName = "";
+                                $scope.model.password = "";
+                                $scope.model.userKey = "";
+                                
+                                bootbox.alert("User logged in Successfully");
+                            });
+    
+    
+    
+    
+                        }
+    
+                        // done
+                        captcha.refresh();
+    
                     }
-
-                    // done
-                    captcha.refresh();
-
-                }
-            });
+                });
+            }else{
+                $scope.status.validationErrors = "Please fill in all the fields";
+            }
         }else{
             $scope.status.validationErrors = "Please select captcha";
         }

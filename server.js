@@ -13,6 +13,10 @@ var express = require( 'express' ),
     _startRoute;
 var speakeasy = require('speakeasy');
 
+//mongodb connection- connect ot users collection
+var mongojs = require("mongojs");
+var db = mongojs('dbuser:Password1@ds019940.mlab.com:19940/iws2project', ['users']);
+
 // Set session information
 app.use( sessions({
     cookieName: 'session',
@@ -124,20 +128,7 @@ var validateCaptcha = function( req, formData ) {
 
 };
 
-var _trySubmission = function( req, res, next ){
-    var captchaResult = validateCaptcha(req, req.body);
 
-    if(captchaResult != 0){
-        var result = {
-            text: "Not Valid Captcha"
-        }
-        res.json(result);
-    }
-
-    res.json("valid captcha");
-
-
-};
 
 //variable that stores current session secret key- changes on page reload
 var sessionSecret;
@@ -160,34 +151,192 @@ var generateQRcode = function(req,res){
 }
 
 //function to verify if user key is valid TOTP
-var verifyQrCode = function(base32secret,userKey){
+var verifyQrCode = function(base32secret,userKey,callback){
     var verified = speakeasy.totp.verify({ secret: base32secret,
         encoding: 'base32',
         token: userKey });
-    return verified;
+    if(callback!=undefined){
+        callback(verified);
+    }
+}
+
+//function to check if user exists
+var checkUser = function(userName, callback){
+    
+    db.users.findOne({userName:userName }, function(err,doc){
+        //if error return
+        if(err){
+            console.log("error while finding user");
+        }
+        else{
+            //if user exists
+            if(doc){
+                console.log("user found");
+                if(callback != undefined){
+                    callback(true,doc);
+                }
+            }
+            else{
+                console.log("user Not found");
+                //if here no user found
+                if(callback!=undefined){
+                    callback(false);
+                }
+            }
+        }
+        
+    });
 }
 
 //function that registers users
 var _tryRegister = function(req, res, next){
 
-    //validate user key
-    var validKey = verifyQrCode(sessionSecret,req.body.userKey);
-
-    if(validKey){
-        res.json(0);
+    //define response object
+    var response = {};
+    
+    //check if sessiob=n key exist
+    if(sessionSecret){
+        
+        var verifyQrCodeCB = function(validKey){
+            if(validKey){
+            
+            //callback function to handle check user function
+            var checkUserCB = function(userExist){
+                
+                console.log(userExist);
+                //if user exists return response
+                if(userExist){
+                    console.log("inside user exists");
+                    //return response
+                    response = {
+                        "code": 1,
+                        "text":"User already exists. Please try logging in"
+                    };
+                    
+                    return res.json(response);
+                    
+                }
+                //if user does not exist
+                else{
+                    console.log("inside user not exist");
+                    //add to database
+                    var user = {
+                        "userName":req.body.userName,
+                        "password":req.body.userPass,
+                        "secretKey": sessionSecret
+                    }
+                    db.users.insert(user,function(err,doc){
+                        console.log("User Added.. " + doc._id);
+                        return res.json({"code":0});
+                    });
+                }
+            }
+            
+            //check if user exists
+            checkUser(req.body.userName, checkUserCB);
+            
+        }
+        
+            else{
+            //if here not valid key
+            response = {
+                code:1,
+                text:"Authentication key is not valid"
+            }
+            return res.json(response);
+        }
+        }
+        //validate user key
+        verifyQrCode(sessionSecret,req.body.userKey, verifyQrCodeCB);
+        
     }
 
-    //if here not valid key
-    var response = {
-        text:"Authentication key is not valid"
-    }
-    res.json(response);
+    
 }
 
+//function that validates login 
+var _tryLogin = function( req, res, next ){
+    
+    //get user data
+    var user = req.body;
+    
+    //validate captcha
+    var captchaResult = validateCaptcha(req, req.body);
+    
+    //return if not valid captcha
+    if(captchaResult != 0){
+        var result = {
+            code:1,
+            text: "Not Valid Captcha"
+        }
+        return res.json(result);
+    }
+    
+    //if captcha valid
+    else{
+        //check if user exists
+        var checkUserCB = function(userExists,userDoc){
+            
+            //if exists login
+            if(userExists){
+                
+                //if user exists
+                if(userDoc!=undefined){
+                    
+                    //function to validate qr code
+                    var verifyQrCodeCB = function(validKey){
+                        //if valid key
+                        if(validKey){
+                            
+                            //check user name and password
+                            if(userDoc.password == user.userPass){
+                                return res.json({
+                                    "code":0
+                                });
+                            }
+                            else{
+                                return res.json({
+                                    "code":1,
+                                    "text": "User Name/Password wrong!"
+                                });
+                            }
+                            
+                        }
+                        //else ask to re-enter key
+                        else{
+                            return res.json({
+                                "code":1,
+                                "text":"TOTP key not valid. Please re-enter key"
+                            });
+                        }
+                    }
+                    //verify qr code
+                    verifyQrCode(userDoc.secretKey,user.userKey,verifyQrCodeCB)
+                }
+               
+            }
+            
+            //else ask to register- if here user does not exist
+            else{
+                return res.json({
+                    "code":1,
+                    "text": "User does not exist. Please Register"
+                })
+            }
+        }
+        
+        checkUser(user.userName, checkUserCB)
+        
+    }
+
+
+};
+
 // Routes definition
-app.post( '/login', _trySubmission );
+app.post( '/login', _tryLogin );
 app.post('/register', _tryRegister);
 app.get('/getqrcode', generateQRcode);
+
 // @param type is optional and defaults to 'mp3', but can also be 'ogg'
 app.get( '/audio', _getAudio );
 app.get( '/audio/:type', _getAudio );
@@ -204,6 +353,6 @@ module.exports = app;
 //app.listen( process.env.PORT || 8282 );
 //console.log("Server started at http://localhost:8282");
 
-app.listen(process.env.PORT || 3010, process.env.IP || "0.0.0.0", function(){
-  console.log("server listening at", 3010);
+app.listen(process.env.PORT || 9025, process.env.IP || "0.0.0.0", function(){
+  console.log("server listening at", 9025);
 });

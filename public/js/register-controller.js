@@ -13,7 +13,9 @@ angular.module("iwsProjectApp").controller("RegisterController", ["$scope", func
 
     //function that generates qrcode
     $scope.getqrcode = function(){
-
+        
+        //empty dom before populating
+        $("#qrcode").empty()
         //get the qrcode object
         $.get('/getqrcode', function(res){
             //build the qrcode
@@ -32,7 +34,9 @@ angular.module("iwsProjectApp").controller("RegisterController", ["$scope", func
 
             // get the post data
             var postData = {
-                "userKey": model.userKey
+                "userKey": model.userKey,
+                "userPass": model.password,
+                "userName": model.userName
             };
 
             // post
@@ -50,12 +54,23 @@ angular.module("iwsProjectApp").controller("RegisterController", ["$scope", func
                     if (res.code != 0) {
                         $scope.$apply(function () {
                             $scope.status.validationErrors = res.text;
+                            //reset fields after register
+                            $scope.model.userName = "";
+                            $scope.model.password = "";
+                            $scope.model.userKey = "";
                         });
 
                     } else {
-
+                        
                         $scope.$apply(function () {
-                            $scope.status.validationErrors = "";
+                            //reset fields after register
+                            $scope.model.userName = "";
+                            $scope.model.password = "";
+                            $scope.model.userKey = "";
+                            //generate new qrcode on register
+                            $scope.getqrcode();
+                            
+                            bootbox.alert("User Registered Successfully. Please try logging in");
                         });
 
                         //show alert
@@ -69,7 +84,7 @@ angular.module("iwsProjectApp").controller("RegisterController", ["$scope", func
                 }
             });
         }else{
-            $scope.status.validationErrors = "Please fill in required fields";
+            $scope.status.validationErrors = "Please fill in all the fields";
         }
 
     }
